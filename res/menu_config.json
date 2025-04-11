@@ -1,0 +1,95 @@
+{
+  "menus": {
+    "main": {
+      "title": "选择想要购买的商品",
+      "multi_select": false,
+      "options": [
+        {
+          "key": 1,
+          "label": "粮食",
+          "action": {
+            "type": "switch_menu",
+            "target": "food"
+          }
+        },
+        {
+          "key": 2,
+          "label": "材料",
+          "action": {
+            "type": "switch_menu",
+            "target": "materials"
+          }
+        },
+        {
+          "key": 0,
+          "label": "退出系统",
+          "action": {
+            "type": "exit"
+          }
+        }
+      ]
+    },
+    "food": {
+      "title": "粮食",
+      "multi_select": true,
+      "options": [
+        {
+          "key": 1,
+          "label": "小麦"
+        },
+        {
+          "key": 2,
+          "label": "大豆"
+        },
+        {
+          "key": 3,
+          "label": "棉花"
+        },
+        {
+          "key": 9,
+          "label": "开始执行",
+          "action": {
+            "type": "execute"
+          }
+        },
+        {
+          "key": 0,
+          "label": "返回主菜单",
+          "action": {
+            "type": "switch_menu",
+            "target": "main"
+          }
+        }
+      ]
+    },
+    "materials": {
+      "title": "材料",
+      "multi_select": true,
+      "options": [
+        {
+          "key": 1,
+          "label": "木板"
+        },
+        {
+          "key": 2,
+          "label": "胶带"
+        },
+                {
+          "key": 9,
+          "label": "开始执行",
+          "action": {
+            "type": "execute"
+          }
+        },
+        {
+          "key": 0,
+          "label": "返回主菜单",
+          "action": {
+            "type": "switch_menu",
+            "target": "main"
+          }
+        }
+      ]
+    }
+  }
+}
