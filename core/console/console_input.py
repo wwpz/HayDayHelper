@@ -76,7 +76,7 @@ class ConsoleInput:
                 raw = input(prompt).strip()
 
                 if not raw:
-                    raise ValueError("输入不能为空")
+                    raise ValueError("输入不能为空，请重新选择")
 
                 # 处理单选输入
                 input_item = raw.strip()
@@ -108,6 +108,9 @@ class ConsoleInput:
             if 'action' in item:
                 should_exit = self.handle_action(item['action'], menu_name)
                 if should_exit:
+                    if not self.shopping_cart:
+                        print("选择为空，请先进行有效选择。")
+                        return False
                     return True
                 choices.discard(key)
 
@@ -134,6 +137,9 @@ class ConsoleInput:
             self.show_receipt()
             return True
         elif action_type == 'exit':
+            if not self.shopping_cart:
+                print("选择为空，请先进行有效选择。")
+                return False
             exit()
         elif action_type == 'switch_menu':
             self.menu_stack.append(action['target'])
@@ -183,3 +189,5 @@ if __name__ == "__main__":
     system = ConsoleInput(config_path)
     item = system.run()
     print(item)
+
+

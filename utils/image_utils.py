@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-
+from core.log import log
 
 class ImageUtils:
     @staticmethod
@@ -29,7 +29,7 @@ class ImageUtils:
         else:
             result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
-        print(f"本次识图的结果为：max_val={max_val}, max_loc={max_loc}")
+        log.debug(f"本次识图的结果为：max_val={max_val}, max_loc={max_loc}")
         # 检查最大匹配值是否满足阈值要求
         if threshold is not None and max_val < threshold:
             return 0.0, (-1, -1)  # 返回默认值
@@ -86,7 +86,7 @@ class ImageUtils:
                     best_max_loc = current_max_loc
 
             except cv2.error as e:
-                print(f"模板匹配出错（缩放比例 {current_scale}）: {e}")
+                log.debug(f"模板匹配出错（缩放比例 {current_scale}）: {e}")
 
             current_scale += scale_step
 

@@ -5,6 +5,7 @@ import traceback
 import subprocess
 import numpy as np
 from io import BytesIO
+from core.log import log
 from PIL import Image, ImageDraw, ImageEnhance
 from utils.image_utils import ImageUtils
 
@@ -23,22 +24,22 @@ class SimulatorController:
         try:
             # 断开所有已连接的设备
             subprocess.run(["adb", "disconnect"], capture_output=True)
-            print("已断开所有已连接的设备。将重新连接端口")
+            log.debug("启动前先断开所有已连接的设备。将重新连接端口")
 
             # 尝试连接到指定端口的模拟器
             result = subprocess.run(["adb", "connect", f"127.0.0.1:{self.port}"], capture_output=True, text=True)
-            print(result.stdout)  # 打印连接结果
+            log.debug(result.stdout)  # 打印连接结果
 
             if "connected" in result.stdout:
-                print("成功连接到 MuMu 模拟器！")
+                log.info(f"成功连接到 MuMu 模拟器——端口：{self.port}")
                 self.connected = True
                 return True
             else:
-                print("连接失败，请检查 MuMu 模拟器是否已启动。")
+                log.info("连接失败，请检查 MuMu 模拟器是否已启动。")
                 self.connected = False
                 return False
         except Exception as e:
-            print(f"发生错误: {e}")
+            log.debug(f"连接模拟器发生错误: {e}")
             self.connected = False
             return False
 
@@ -49,16 +50,16 @@ class SimulatorController:
         """
         try:
             result = subprocess.run(["adb", "disconnect", f"127.0.0.1:{self.port}"], capture_output=True, text=True)
-            print(result.stdout)  # 打印断开连接结果
+            log.debug(result.stdout)  # 打印断开连接结果
             if "disconnected" in result.stdout:
-                print("成功断开与 MuMu 模拟器的连接！")
+                log.debug("成功断开与 MuMu 模拟器的连接！")
                 self.connected = False
                 return True
             else:
-                print("断开连接失败。")
+                log.debug("断开连接失败。")
                 return False
         except Exception as e:
-            print(f"发生错误: {e}")
+            log.debug(f"发生错误: {e}")
             return False
 
     def click(self, x, y):
@@ -68,16 +69,16 @@ class SimulatorController:
         :param y: 纵坐标
         """
         if not self.connected:
-            print("未连接到模拟器，请先调用 connect() 方法。")
+            log.debug("未连接到模拟器，请先调用 connect() 方法。")
             return False
 
         try:
             # 使用 adb shell input tap 命令模拟点击
             subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)])
-            # print(f"模拟点击成功，坐标: ({x}, {y})")
+            log.debug(f"模拟点击成功，坐标: ({x}, {y})")
             return True
         except Exception as e:
-            print(f"模拟点击失败: {e}")
+            log.debug(f"模拟点击失败: {e}")
         return False
 
     def swipe(self, x1, y1, x2, y2, duration=900):
@@ -90,15 +91,15 @@ class SimulatorController:
         :param duration: 滑动持续时间（毫秒，默认 100ms）
         """
         if not self.connected:
-            print("未连接到模拟器，请先调用 connect() 方法。")
+            log.debug("未连接到模拟器，请先调用 connect() 方法。")
             return
 
         try:
             # 使用 adb shell input swipe 命令模拟滑动
             subprocess.run(["adb", "shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(duration)])
-            print(f"模拟滑动成功，从 ({x1}, {y1}) 到 ({x2}, {y2})，持续时间: {duration}ms")
+            log.debug(f"模拟滑动成功，从 ({x1}, {y1}) 到 ({x2}, {y2}),持续时间: {duration}ms")
         except Exception as e:
-            print(f"模拟滑动失败: {e}")
+            log.debug(f"模拟滑动失败: {e}")
 
     def take_screenshot(self, enhance=False):
         """
@@ -106,7 +107,7 @@ class SimulatorController:
         :return: 返回修改后的字节图像对象
         """
         if not self.connected:
-            print("未连接到模拟器，请先调用 connect() 方法。")
+            log.debug("未连接到模拟器，请先调用 connect() 方法。")
             return
 
         try:
@@ -158,15 +159,12 @@ class SimulatorController:
             # 调试时显示图像
             # image.show()
 
-
-
-
             with BytesIO() as byte_stream:
                 image.save(byte_stream, format='PNG')
                 byte_data = byte_stream.getvalue()  # 在流关闭前获取数据
             return byte_data
         except Exception as e:
-            print(f"截图失败: {e}")
+            log.debug(f"截图失败: {e}")
             return None
 
     def is_connected(self):
@@ -177,13 +175,13 @@ class SimulatorController:
         return self.connected
 
     def find_element(self, target, threshold=0.9,enable_scaling=False):
-        # now_image_name = target.replace('./res/', '')
-        # print(f"本次查找的图片路径为------：" + now_image_name)
+        now_image_name = target.replace('./res/', '')
+        log.debug(f"本次查找的图片路径为------：" + now_image_name)
 
         # 捕获游戏窗口，判断是否在游戏窗口内进行截图
         screenshot_result = self.take_screenshot()
         if not screenshot_result:
-            print("截图失败")
+            log.debug("截图失败")
             return None
 
         try:
@@ -227,7 +225,7 @@ class SimulatorController:
             # cv2.destroyAllWindows()
 
             if matchVal > 0 and matchLoc != (-1, -1):
-                print(f"目标图片：{target.replace('./res/', '')} 相似度：{matchVal:.2f}")
+                log.debug(f"目标图片：{target.replace('./res/', '')} 相似度：{matchVal:.2f}")
                 if mask is not None:
                     if not math.isinf(matchVal) and (threshold is None or matchVal <= threshold):
                         top_left, bottom_right = ImageUtils.calculate_center_position(template, matchLoc)
@@ -238,8 +236,8 @@ class SimulatorController:
                         return top_left, bottom_right, matchVal
 
         except Exception as e:
-            print(f"目标图片路径未找到------：{target.replace('./res/', '')}")
-            print(f"寻找图片出错：{e}")
+            log.debug(f"目标图片路径未找到------：{target.replace('./res/', '')}")
+            log.debug(f"寻找图片出错：{e}")
             traceback.print_exc()
         return None
 
@@ -265,7 +263,7 @@ class SimulatorController:
 from pathlib import Path
 import os
 from core.ocr.PPOCR_api import GetOcrApi
-
+from utils.ocr_analysis import OcrAnalysis
 
 
 
@@ -279,8 +277,8 @@ if __name__ == "__main__":
     if simulator.connect():
         screenshot = simulator.take_screenshot(enhance=True)
         ocr_res = ocr.runBytes(screenshot)
-        # current_corner_texts = ImageUtils.get_corner_texts(ocr_res)
-        # print(f"当前获取的{current_corner_texts}")
+        current_corner_texts = OcrAnalysis.get_corner_texts(ocr_res)
+        print(f"当前获取的{current_corner_texts}")
         print(ocr_res)
         # print(simulator.find_element("./res/image/more1.png"))
 

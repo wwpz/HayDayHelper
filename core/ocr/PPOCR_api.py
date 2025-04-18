@@ -149,7 +149,7 @@ class PPOCR_pipe:  # 调用OCR（管道模式）
                 print(f"[Error] ret.kill() {e}")
         self.ret = None
         atexit.unregister(self.exit)  # 移除退出处理
-        print("###  PPOCR引擎子进程关闭！")
+        # print("###  PPOCR引擎子进程关闭！")
 
     @staticmethod
     def printResult(res: dict):

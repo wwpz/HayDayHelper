@@ -1,6 +1,7 @@
 import time
 import keyboard
 import threading
+from core.log import log
 from core.console import console
 from core.ocr.PPOCR_api import GetOcrApi
 from utils.ocr_analysis import OcrAnalysis
@@ -11,21 +12,23 @@ orc_path = 'core/ocr/PaddleOCR/PaddleOCR-json.exe'
 # 全局停止标志
 stop_flag = True
 # 初始化计数器
-counter = 0
+counter = 1
 # 存储报纸每页的数据
 corner_texts_storage = {}
 lock = threading.Lock()  # 线程锁
+# 统计计数器
+refresh_counter = 0
 
 
 def keyboard_listener():
     global stop_flag
-    print("键盘检测线程已启动 (按Q停止)")
+    log.info("键盘检测线程已启动 (按 q 停止)")
 
     def on_press(event):
         global stop_flag
         if event.name == 'q':
             with lock:
-                print("\n检测到Q键按下，停止程序...")
+                log.info("检测到 q 键按下，停止程序...")
                 stop_flag = False
 
     keyboard.on_press(on_press)
@@ -36,21 +39,20 @@ def keyboard_listener():
                 break
         time.sleep(0.1)
 
+    # 停止键盘监听
     keyboard.unhook_all()
-    print("键盘监听已停止")
 
 
 def main():
-    global stop_flag, counter, corner_texts_storage
+    global stop_flag, counter, corner_texts_storage, refresh_counter
 
     print("程序启动...")
     key, label = console.run()
+    log.info(f"当前选择商品：{key}")
 
     if not simulator.connect():
-        print("模拟器连接失败")
         return
 
-    print("模拟器连接成功")
     ocr = GetOcrApi(orc_path)
 
     # 启动键盘监听线程
@@ -61,18 +63,20 @@ def main():
         while True:
             with lock:
                 if not stop_flag:
-                    print("收到停止信号，退出主循环")
+                    log.info("收到停止信号,即将退出主循环")
                     break
 
-            print(f"\n当前计数: {counter}")
+            log.debug(f"当前计数: {counter}")
             screenshot = simulator.take_screenshot(enhance=True)
             ocr_res = ocr.runBytes(screenshot)
 
-            # 存储左页角标文本
-            current_corner_texts = OcrAnalysis.get_corner_texts(ocr_res)
-            corner_texts_storage[counter] = current_corner_texts
+            if counter <= 5:
+                # 存储左页角标文本
+                current_corner_texts = OcrAnalysis.get_corner_texts(ocr_res)
+                current_corner_texts_all = OcrAnalysis.get_corner_texts(ocr_res, False)
+                corner_texts_storage[counter] = current_corner_texts
+                log.info(f"当前所在 {counter} 页,内容为：{current_corner_texts_all}")
 
-            if counter < 4:
                 # 前4页处理逻辑
                 locations = OcrAnalysis.find_trading_location(ocr_res, label)
 
@@ -98,17 +102,18 @@ def main():
                         if found:
                             return
                         else:
-                            print(f"未在小店中找到想要购买的 {label},将重新返回报纸进行刷新")
+                            log.info(f"未在小店中找到想要购买的 {label},将重新返回报纸进行刷新")
                             simulator.click_element("./res/image/return.png")
                             time.sleep(1)
 
-                    print("遍历完所有位置都未找到目标，继续刷新报纸")
+                    log.info("遍历完所有位置都未找到目标，继续刷新报纸")
+                    refresh_counter += 1
+                    log.info(f"报纸已刷新 {refresh_counter} 次")
                     break
                 else:
                     simulator.swipe(1670.0, 1030.0, 870.0, 1030.0)
                     time.sleep(1)
             else:
-                print("往回")
                 screenshot = simulator.take_screenshot(enhance=True)
                 ocr_res = ocr.runBytes(screenshot)
 
@@ -124,9 +129,11 @@ def main():
                         break
 
                 if current_page is not None:
-                    print(f"当前页属于第 {current_page} 页")
+                    log.info(f"当前页属于第 {current_page} 页,内容为：{current_corner_texts}")
                 else:
-                    print("页面已刷新，重置存储的 corner_texts_storage")
+                    log.info("页面已刷新,将再次查找")
+                    refresh_counter += 1
+                    log.info(f"报纸已刷新 {refresh_counter} 次")
                     corner_texts_storage = {counter: current_corner_texts}
 
                 # 后4次遍历所有识别结果
@@ -144,9 +151,11 @@ def main():
                             break
 
                     if is_page_refreshed:
-                        print("页面已刷新，停止当前循环并重置")
+                        log.info("页面已刷新，停止当前循环并重置")
+                        refresh_counter += 1
+                        log.info(f"报纸已刷新 {refresh_counter} 次")
                         corner_texts_storage = {}
-                        counter = -1
+                        counter = 0
                         break  # 停止当前循环
 
                     box = result['box']
@@ -161,7 +170,7 @@ def main():
                     for _ in range(3):
                         with lock:
                             if not stop_flag:
-                                break
+                                return
                         if simulator.click_element(target):
                             found = True
                             break
@@ -175,12 +184,12 @@ def main():
                     if found:
                         return
                     else:
-                        print(f"未在小店中找到想要购买的 {label},将重新返回报纸进行刷新")
+                        log.info(f"未在小店中找到想要购买的 {label},将重新返回报纸进行刷新")
                         simulator.click_element("./res/image/return.png")
                         time.sleep(1.5)
-                if counter < 0:
+                if counter < 1:
                     time.sleep(1)
-                elif current_page >= 1:
+                elif current_page >= 2:
                     simulator.swipe(200.0, 1030.0, 1670.0, 1030.0, 800)
 
             counter += 1
@@ -192,7 +201,8 @@ def main():
         with lock:
             stop_flag = False
         keyboard_thread.join()
-        print("程序已停止")
+        log.info("程序已停止")
+        log.info(f"报纸总共刷新了 {refresh_counter} 次")
 
 
 if __name__ == '__main__':
