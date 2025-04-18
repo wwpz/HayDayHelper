@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-
+from collections import defaultdict
 
 class ImageUtils:
     @staticmethod
@@ -14,7 +14,7 @@ class ImageUtils:
         return template.shape[::-1]
 
     @staticmethod
-    def scale_and_match_template(screenshot, template, threshold=None, mask=None):
+    def match_template(screenshot, template, threshold=None, mask=None):
         """
         :param screenshot: 截图。
         :param template: 模板图片。
@@ -22,23 +22,79 @@ class ImageUtils:
         :param mask: 模板的掩码，用于匹配透明区域。
         :return: 最大匹配值和最佳匹配位置。
         """
-        try:
-            if mask is not None:
-                result = cv2.matchTemplate(screenshot, template, cv2.TM_SQDIFF, mask=mask)
-                min_val, _, min_loc, _ = cv2.minMaxLoc(result)
-                return min_val, min_loc
-            else:
-                result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
-                _, max_val, _, max_loc = cv2.minMaxLoc(result)
-                print(f"本次识图的结果为：max_val={max_val}, max_loc={max_loc}")
-                # 检查最大匹配值是否满足阈值要求
-                if threshold is not None and max_val < threshold:
-                    return 0.0, (-1, -1)  # 返回默认值
+        if mask is not None:
+            result = cv2.matchTemplate(screenshot, template, cv2.TM_SQDIFF, mask=mask)
+            min_val, _, min_loc, _ = cv2.minMaxLoc(result)
+            return min_val, min_loc
+        else:
+            result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        print(f"本次识图的结果为：max_val={max_val}, max_loc={max_loc}")
+        # 检查最大匹配值是否满足阈值要求
+        if threshold is not None and max_val < threshold:
+            return 0.0, (-1, -1)  # 返回默认值
 
-                return max_val, max_loc
-        except cv2.error as e:
-            print(f"模板匹配出错：{e}")
-            return 0.0, (-1, -1)
+        return max_val, max_loc
+
+    @staticmethod
+    def scale_and_match_template(screenshot, template, threshold=None, mask=None, scale_range=(0.8, 1.1),
+                                 scale_step=0.1, enable_scaling=True):
+        """
+        :param screenshot: 截图。
+        :param template: 模板图片。
+        :param threshold: 匹配阈值，小于此值的匹配将被忽略。
+        :param mask: 模板的掩码，用于匹配透明区域。
+        :param scale_range: 缩放比例范围，元组形式 (min_scale, max_scale)。
+        :param scale_step: 缩放步长。
+        :param enable_scaling: 是否启用缩放功能。
+        :return: 最大匹配值、最佳匹配位置和最佳缩放比例。
+        """
+        best_max_val = 0.0
+        best_max_loc = (-1, -1)
+
+        if enable_scaling:
+            min_scale, max_scale = scale_range
+            current_scale = min_scale
+        else:
+            # 如果不启用缩放，则只使用原始比例（1.0）
+            min_scale, max_scale = 1.0, 1.0
+            current_scale = 1.0
+
+        while current_scale <= max_scale:
+            # 缩放模板图
+            scaled_template = cv2.resize(template, None, fx=current_scale, fy=current_scale,
+                                         interpolation=cv2.INTER_AREA)
+
+            try:
+                if mask is not None:
+                    # 缩放掩码
+                    scaled_mask = cv2.resize(mask, None, fx=current_scale, fy=current_scale,
+                                             interpolation=cv2.INTER_AREA)
+                    result = cv2.matchTemplate(screenshot, scaled_template, cv2.TM_SQDIFF, mask=scaled_mask)
+                    min_val, _, min_loc, _ = cv2.minMaxLoc(result)
+                    current_max_val = 1 - min_val  # 对于 TM_SQDIFF，取反以统一比较
+                    current_max_loc = min_loc
+                else:
+                    result = cv2.matchTemplate(screenshot, scaled_template, cv2.TM_CCOEFF_NORMED)
+                    _, current_max_val, _, current_max_loc = cv2.minMaxLoc(result)
+
+                # print(f"缩放比例: {current_scale}, 匹配值: {current_max_val}, 匹配位置: {current_max_loc}")
+
+                # 更新最佳匹配结果
+                if current_max_val > best_max_val:
+                    best_max_val = current_max_val
+                    best_max_loc = current_max_loc
+
+            except cv2.error as e:
+                print(f"模板匹配出错（缩放比例 {current_scale}）: {e}")
+
+            current_scale += scale_step
+
+        # 检查最大匹配值是否满足阈值要求
+        if threshold is not None and best_max_val < threshold:
+            return 0.0, (-1, -1)  # 返回默认值
+
+        return best_max_val, best_max_loc
 
     @staticmethod
     def scale_and_match_template_with_multiple_targets(screenshot, template, threshold=None, scale=None):
@@ -177,16 +233,59 @@ class ImageUtils:
         return center_x, center_y
 
     @staticmethod
-    def convert_to_global(x, y):
+    def get_corner_texts(ocr_res):
         """
-        将找到的中心坐标位置匹配为全局中心坐标。
-        :param x: 模板图片。
-        :param y: 最佳匹配位置。
-        :return: 匹配位置的中心坐标。
+        根据 OCR 识别结果，获取某一侧（左侧）的文本值，并按固定顺序排列。
         """
-        window = gw.getWindowsWithTitle(cfg.get_value("window_title"))
-        if window:
-            win = window[0]
-        else:
-            raise Exception(f"Window with title '{cfg.get_value("window_title")}' not found.")
-        return win.left + x, win.top + y
+        # 定义屏幕的中心 x 坐标
+        center_x = 1920 / 2
+
+        # 初始化结果列表
+        left_side_texts = []
+
+        # 遍历 OCR 识别结果，根据 box 坐标判断文本位置
+        for result in ocr_res['data']:
+            # 过滤掉置信度（score）低于 0.7 的识别结果
+            if 'score' in result and result['score'] < 0.7:
+                continue
+
+            # 获取 box 的 x 和 y 坐标
+            box = result['box']
+            x_coords = [point[0] for point in box]
+            y_coords = [point[1] for point in box]
+
+            # 判断文本是否在左侧（x 坐标小于中心点）
+            if all(x < center_x for x in x_coords):
+                # 提取最小的 y 和 x 坐标（文本区域的最上方和最左侧）
+                y_coord = min(y_coords)
+                x_coord = min(x_coords)
+                left_side_texts.append({
+                    'text': result['text'],
+                    'y': y_coord,
+                    'x': x_coord
+                })
+                # print(f"Added text: {result['text']}, y: {y_coord}, x: {x_coord}")
+
+        # 按 y 坐标分组（将相近的 y 坐标视为同一行）
+        y_threshold = 20  # 定义 y 坐标的阈值
+        grouped_texts = defaultdict(list)
+        for item in left_side_texts:
+            # 找到最接近的 y 坐标组
+            matched_y = None
+            for y in grouped_texts.keys():
+                if abs(y - item['y']) <= y_threshold:
+                    matched_y = y
+                    break
+            if matched_y is None:
+                matched_y = item['y']
+            grouped_texts[matched_y].append(item)
+
+        # 按 y 坐标从小到大排序，然后对每行内的文本按 x 坐标排序
+        sorted_texts = []
+        for y in sorted(grouped_texts.keys()):
+            row_texts = sorted(grouped_texts[y], key=lambda item: item['x'])
+            sorted_texts.extend([item['text'] for item in row_texts])
+
+        print(f"sorted_texts: {sorted_texts}")
+        return sorted_texts
+

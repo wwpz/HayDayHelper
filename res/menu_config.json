@@ -6,7 +6,7 @@
       "options": [
         {
           "key": 1,
-          "label": "粮食",
+          "label": "粮仓物品",
           "action": {
             "type": "switch_menu",
             "target": "food"
@@ -14,7 +14,7 @@
         },
         {
           "key": 2,
-          "label": "材料",
+          "label": "货仓物品",
           "action": {
             "type": "switch_menu",
             "target": "materials"
@@ -30,7 +30,7 @@
       ]
     },
     "food": {
-      "title": "粮食",
+      "title": "粮仓物品",
       "multi_select": true,
       "options": [
         {
@@ -39,11 +39,19 @@
         },
         {
           "key": 2,
-          "label": "大豆"
+          "label": "玉米"
         },
         {
           "key": 3,
-          "label": "棉花"
+          "label": "胡萝卜"
+        },
+        {
+          "key": 4,
+          "label": "大豆"
+        },
+        {
+          "key": 5,
+          "label": "甘蔗"
         },
         {
           "key": 9,
@@ -63,18 +71,18 @@
       ]
     },
     "materials": {
-      "title": "材料",
+      "title": "货仓物品",
       "multi_select": true,
       "options": [
         {
-          "key": 1,
+          "key": 11,
           "label": "木板"
         },
         {
-          "key": 2,
+          "key": 12,
           "label": "胶带"
         },
-                {
+        {
           "key": 9,
           "label": "开始执行",
           "action": {

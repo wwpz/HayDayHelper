@@ -1,15 +1,16 @@
 import io
 import cv2
 import math
+import traceback
 import subprocess
 import numpy as np
 from io import BytesIO
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageEnhance
 from utils.image_utils import ImageUtils
 
 
 class SimulatorController:
-    def __init__(self, port=7555):
+    def __init__(self, port):
         self.port = port
         self.img_cache = {}
         self.connected = False
@@ -20,8 +21,14 @@ class SimulatorController:
         :return: 连接成功返回 True，否则返回 False
         """
         try:
+            # 断开所有已连接的设备
+            subprocess.run(["adb", "disconnect"], capture_output=True)
+            print("已断开所有已连接的设备。将重新连接端口")
+
+            # 尝试连接到指定端口的模拟器
             result = subprocess.run(["adb", "connect", f"127.0.0.1:{self.port}"], capture_output=True, text=True)
             print(result.stdout)  # 打印连接结果
+
             if "connected" in result.stdout:
                 print("成功连接到 MuMu 模拟器！")
                 self.connected = True
@@ -67,7 +74,7 @@ class SimulatorController:
         try:
             # 使用 adb shell input tap 命令模拟点击
             subprocess.run(["adb", "shell", "input", "tap", str(x), str(y)])
-            print(f"模拟点击成功，坐标: ({x}, {y})")
+            # print(f"模拟点击成功，坐标: ({x}, {y})")
             return True
         except Exception as e:
             print(f"模拟点击失败: {e}")
@@ -114,30 +121,45 @@ class SimulatorController:
 
             # 获取图像的分辨率
             width, height = image.size
-            print(f"截图的分辨率: {width}x{height}")
+            # print(f"截图的分辨率: {width}x{height}")
 
             if enhance:
                 # 在内存中修改图像：控制涂白的高度
                 draw = ImageDraw.Draw(image)
-                draw.rectangle([(0, 140), (width, 410)], fill="white")
-                draw.rectangle([(0, 455), (width, 730)], fill="white")
-                draw.rectangle([(0, 770), (width, 1030)], fill="white")
-                draw.rectangle([(555, 0), (590, image.height)], fill="white")
-                draw.rectangle([(900, 0), (1000, image.height)], fill="white")
-                draw.rectangle([(1325, 0), (1385, image.height)], fill="white")
+                draw.rectangle([(0, 0), (width, 100)], fill="white")
+                draw.rectangle([(0, 145), (width, 420)], fill="white")
+                draw.rectangle([(0, 460), (width, 730)], fill="white")
+                draw.rectangle([(0, 780), (width, height)], fill="white")
+
+                draw.rectangle([(0, 0), (300, height)], fill="white")
+                draw.rectangle([(530, 0), (650, height)], fill="white")
+                draw.rectangle([(900, 0), (1070, height)], fill="white")
+                draw.rectangle([(1280, 0), (1420, height)], fill="white")
+                draw.rectangle([(1600, 0), (width, height)], fill="white")
+                # 增强对比度
+                enhancer = ImageEnhance.Contrast(image)
+                image = enhancer.enhance(2)
+
+                # 增强亮度
+                enhancer = ImageEnhance.Brightness(image)
+                image = enhancer.enhance(3)
+                # 转为灰度图（替代OpenCV预处理）
+                image = image.convert('L')
+                # 放大倍率
+                # scale_percent = 100  # 放大200%
+                #
+                # # 计算新的宽度和高度
+                # width = int(image.width * scale_percent / 100)
+                # height = int(image.height * scale_percent / 100)
+                #
+                # # 调整图像大小
+                # image = image.resize((width, height), Image.BICUBIC)
 
             # 调试时显示图像
             # image.show()
 
-            # 增强对比度
-            # enhancer = ImageEnhance.Contrast(image)
-            # image = enhancer.enhance(contrast_factor)
-            # # 增强亮度
-            # enhancer = ImageEnhance.Brightness(image)
-            # enhanced_img = enhancer.enhance(brightness_factor)
-            # processed_img = enhanced_img.convert('L')  # 转为灰度图（替代OpenCV预处理）
-            # # 调试时显示图片
-            # # processed_img.show()
+
+
 
             with BytesIO() as byte_stream:
                 image.save(byte_stream, format='PNG')
@@ -154,9 +176,9 @@ class SimulatorController:
         """
         return self.connected
 
-    def find_element(self, target, threshold=0.9):
-        now_image_name = target.replace('./res/', '')
-        print(f"本次查找的图片路径为------：" + now_image_name)
+    def find_element(self, target, threshold=0.9,enable_scaling=False):
+        # now_image_name = target.replace('./res/', '')
+        # print(f"本次查找的图片路径为------：" + now_image_name)
 
         # 捕获游戏窗口，判断是否在游戏窗口内进行截图
         screenshot_result = self.take_screenshot()
@@ -178,10 +200,16 @@ class SimulatorController:
 
             if mask is not None:
                 # 执行匹配模板
-                matchVal, matchLoc = ImageUtils.scale_and_match_template(screenshot, template, threshold, mask)
+                if enable_scaling:
+                    matchVal, matchLoc = ImageUtils.scale_and_match_template(screenshot, template, threshold, mask)
+                else:
+                    matchVal, matchLoc = ImageUtils.match_template(screenshot, template, threshold, mask)
             else:
+                if enable_scaling:
+                    matchVal, matchLoc = ImageUtils.scale_and_match_template(screenshot, template, threshold, mask)
                 # 执行匹配模板
-                matchVal, matchLoc = ImageUtils.scale_and_match_template(screenshot, template, threshold, None)
+                else:
+                    matchVal, matchLoc = ImageUtils.match_template(screenshot, template, threshold, None)
 
             # # 获取模板图像的宽度和高度
             # template_width = template.shape[1]
@@ -212,21 +240,22 @@ class SimulatorController:
         except Exception as e:
             print(f"目标图片路径未找到------：{target.replace('./res/', '')}")
             print(f"寻找图片出错：{e}")
-
+            traceback.print_exc()
         return None
 
-    def click_element(self, target, threshold=0.9):
+    def click_element(self, target, threshold=0.9,enable_scaling=False):
         """
         查找并点击屏幕上的元素。
 
         参数:
+        :param enable_scaling: 是否启用缩放功能
         :param target: 图片路径
         :param threshold: 查找阈值，用于图像查找时的相似度匹配。
 
         返回:
         如果找到元素并点击成功，则返回True；否则返回False。
         """
-        coordinates = self.find_element(target, threshold)
+        coordinates = self.find_element(target, threshold,enable_scaling)
         if coordinates:
             top_left, bottom_right, _ = coordinates
             return self.click(top_left, bottom_right)
@@ -235,19 +264,24 @@ class SimulatorController:
 
 from pathlib import Path
 import os
+from core.ocr.PPOCR_api import GetOcrApi
+
+
 
 
 # 示例用法
 if __name__ == "__main__":
-    import os
     os.chdir('F:\\me\\HayDayHelper')
-    simulator = SimulatorController(port=7555)
+    orc_path = 'core/ocr/PaddleOCR/PaddleOCR-json.exe'
+    ocr = GetOcrApi(orc_path)
+
+    simulator = SimulatorController(16384)
     if simulator.connect():
-        # simulator.click(500, 500)  # 模拟点击坐标 (500, 500)
-        # simulator.swipe(100, 100, 300, 300, duration=200)  # 模拟从 (100, 100) 滑动到 (300, 300)
-        # simulator.take_screenshot()  # 截取屏幕并显示
-        # simulator.disconnect()
-        # config_path = Path(__file__).parent / 'F:\\me\\HayDayHelper\\res\\image\\4.png'
-        config_path = './res/image/1.png'
-        coordinates = simulator.find_element(config_path)
-        print(coordinates)
+        screenshot = simulator.take_screenshot(enhance=True)
+        ocr_res = ocr.runBytes(screenshot)
+        # current_corner_texts = ImageUtils.get_corner_texts(ocr_res)
+        # print(f"当前获取的{current_corner_texts}")
+        print(ocr_res)
+        # print(simulator.find_element("./res/image/more1.png"))
+
+
