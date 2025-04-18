@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from collections import defaultdict
+
 
 class ImageUtils:
     @staticmethod
@@ -231,61 +231,3 @@ class ImageUtils:
         center_x = max_loc[0] + width // 2
         center_y = max_loc[1] + height // 2
         return center_x, center_y
-
-    @staticmethod
-    def get_corner_texts(ocr_res):
-        """
-        根据 OCR 识别结果，获取某一侧（左侧）的文本值，并按固定顺序排列。
-        """
-        # 定义屏幕的中心 x 坐标
-        center_x = 1920 / 2
-
-        # 初始化结果列表
-        left_side_texts = []
-
-        # 遍历 OCR 识别结果，根据 box 坐标判断文本位置
-        for result in ocr_res['data']:
-            # 过滤掉置信度（score）低于 0.7 的识别结果
-            if 'score' in result and result['score'] < 0.7:
-                continue
-
-            # 获取 box 的 x 和 y 坐标
-            box = result['box']
-            x_coords = [point[0] for point in box]
-            y_coords = [point[1] for point in box]
-
-            # 判断文本是否在左侧（x 坐标小于中心点）
-            if all(x < center_x for x in x_coords):
-                # 提取最小的 y 和 x 坐标（文本区域的最上方和最左侧）
-                y_coord = min(y_coords)
-                x_coord = min(x_coords)
-                left_side_texts.append({
-                    'text': result['text'],
-                    'y': y_coord,
-                    'x': x_coord
-                })
-                # print(f"Added text: {result['text']}, y: {y_coord}, x: {x_coord}")
-
-        # 按 y 坐标分组（将相近的 y 坐标视为同一行）
-        y_threshold = 20  # 定义 y 坐标的阈值
-        grouped_texts = defaultdict(list)
-        for item in left_side_texts:
-            # 找到最接近的 y 坐标组
-            matched_y = None
-            for y in grouped_texts.keys():
-                if abs(y - item['y']) <= y_threshold:
-                    matched_y = y
-                    break
-            if matched_y is None:
-                matched_y = item['y']
-            grouped_texts[matched_y].append(item)
-
-        # 按 y 坐标从小到大排序，然后对每行内的文本按 x 坐标排序
-        sorted_texts = []
-        for y in sorted(grouped_texts.keys()):
-            row_texts = sorted(grouped_texts[y], key=lambda item: item['x'])
-            sorted_texts.extend([item['text'] for item in row_texts])
-
-        print(f"sorted_texts: {sorted_texts}")
-        return sorted_texts
-
